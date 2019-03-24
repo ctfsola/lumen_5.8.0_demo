@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Session;
 use Validator;
+use Illuminate\Database\Query;
 class userController extends Controller
 {
 
@@ -54,7 +55,7 @@ class userController extends Controller
       ]);
       if ($validator->fails()) {
           //redirect('user/signup')->withErrors($validator)->withInput();
-          return response()->json(['resCode'=>20000,'resMsg'=>$validator->errors()->all()]);
+          return response()->json(['resCode'=>20000,'resMsg'=>implode('',$validator->errors()->all())]);
 
       }
 
@@ -85,7 +86,7 @@ class userController extends Controller
       $add['username'] = $gen_userid;
       $add['email']    = $is_email?$input['phoneOrEmail']:$gen_userid;
       $add['phone']    = $is_phone?$input['phoneOrEmail']:$gen_userid;
-      $add['password'] = md5(Crypt::encryptString($input['password']));
+      $add['password'] = Hash::make($input['password']);//md5(Crypt::encryptString($input['password']));
       $add['reg_time'] = time();
       $add['reg_ip']   = $_SERVER['REMOTE_ADDR'];
       $add['is_new']   = 1;
@@ -116,7 +117,7 @@ class userController extends Controller
    * @return  json
   */
 
-  public function login(){
+  public function login(Request $request){
       $input = $request->all();
       $validator = Validator::make($input, [
           'phoneOrName' => 'required|max:11',  
@@ -125,26 +126,31 @@ class userController extends Controller
           //'userid'      => 'required',
       ]);
       if ($validator->fails()) {
-          return response()->json(['resCode'=>20000,'resMsg'=>$validator->errors()->all()]);
+          return response()->json(['resCode'=>20000,'resMsg'=>implode('',$validator->errors()->all())]);
       }
-      $this->auth_token('user',$input['token']);
+      $this->auth_token('user',$input['token']); //检验令牌函数
 
-      $is_phone = $this->is_mobile_phone($input['phoneOrname'])?$input['phoneOrname']:'';
-      if($is_phone){
-      	$is_pass = DB::table('user')->whereRaw('phone = ? and password = ? and token = ?',[$is_phone,md5(Crypt::encryptString($input['password'])),$token])->first();
+      $is_phone = $this->is_mobile_phone($input['phoneOrName'])?$input['phoneOrName']:'';
+  //DB::enableQueryLog();
+      if($is_phone){ //如果是手机
+      	$pwd = DB::table('user')->whereRaw('phone = ?  and token = ?',[$input['phoneOrName'],$input['token']])->value('password');
       }else{
-      	$is_pass = DB::table('user')->whereRaw('username = ? and password = ? and token = ?',[$input['phoneOrname'],md5(Crypt::encryptString($input['password'])),$token])->first();
+      	$pwd = DB::table('user')->whereRaw('username = ?  and token = ?',[$input['phoneOrName'],$input['token']])->value('password');
       }
+//dump(DB::getQueryLog());
 
+      if($pwd){
+        $is_pass = Hash::check($input['password'],$pwd);
+      }
       if($is_pass){
-          $update['login_time'] = time();
-          $update['login_ip']   = $_SERVER['REMOTE_ADDR'];
-          $update['is_new']     = 0;
-          DB::transaction(function () {
+          DB::transaction(function ()use($is_phone,$input) {
+            $update['login_time'] = time();
+            $update['login_ip']   = $_SERVER['REMOTE_ADDR'];
+            $update['is_new']     = 0;
             if($is_phone){
-                DB::table('user')->where('phone',$input['phoneOrname'])->update(['email' => 'df']);
+                DB::table('user')->where('phone',$input['phoneOrName'])->update($update);
             }else{
-                DB::table('user')->where('username',$input['phoneOrname'])->update(['email' => 'df']);
+                DB::table('user')->where('username',$input['phoneOrName'])->update($update);
             }
           },5);
       		return response()->json([
@@ -228,7 +234,7 @@ class userController extends Controller
           }
       }
 
-      if($token_modify_time<(time()-$expire)){
+      if($res<(time()-$expire)){
           return response()->json(['resCode'=>20002,'resMsg'=>'token_expired']);
       }else{
           return true;

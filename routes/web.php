@@ -10,10 +10,8 @@
 | and give it the Closure to call when that URI is requested.
 |
 */
-
-
-$router->get('/hello', function() use ($router) {
-    return 'Hello World!';
+$router->get('/', function () use ($router) {
+    return $router->app->version();
 });
 
 $router->group(['prefix' => 'api/v1'], function($router)
@@ -24,11 +22,9 @@ $router->group(['prefix' => 'api/v1'], function($router)
     $router->get('car','CarController@index');
 });
 
-$router->get('/', function () use ($router) {
-    return $router->app->version();
-});
-
-//$router->post('user/{id}','UserController@show');
 $router->post('user/test', 'UserController@test');
 $router->post('user/signup','UserController@signup');
 $router->post('user/login','UserController@login');
+$router->get('user/show', 'UserController@show');
+
+
